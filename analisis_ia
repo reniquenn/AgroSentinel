@@ -1,0 +1,65 @@
+import os
+import pandas as pd
+import firebase_admin # Importamos el paquete principal
+from firebase_admin import credentials, firestore # Importamos los módulos específicos
+from sklearn.ensemble import IsolationForest
+import matplotlib.pyplot as plt
+
+# --- 1. CONEXIÓN A FIREBASE ---
+base_path = os.path.dirname(os.path.abspath(__file__))
+cert_path = os.path.join(base_path, "serviceAccountKey.json")
+
+# Verificamos si la app ya fue inicializada para evitar errores al re-ejecutar
+if not firebase_admin._apps:
+    cred = credentials.Certificate(cert_path)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+def descargar_datos():
+    print("Descargando datos de Firebase...")
+    docs = db.collection("sensor_data").stream()
+    data = [doc.to_dict() for doc in docs]
+    return pd.DataFrame(data)
+
+def detectar_anomalias(df):
+    if df.empty:
+        print("No hay datos suficientes.")
+        return None
+
+    # --- 2. PREPARACIÓN DE IA ---
+    # Usaremos Temperatura y Humedad para entrenar
+    X = df[['temperatura', 'humedad']]
+    
+    # Isolation Forest: Ideal para encontrar 'outliers' (valores extraños)
+    # contamination=0.1 significa que esperamos un 10% de anomalías
+    model = IsolationForest(contamination=0.1, random_state=42)
+    df['anomalia_predicha'] = model.fit_predict(X)
+    
+    # -1 significa anomalía, 1 significa normal
+    df['es_alerta'] = df['anomalia_predicha'].apply(lambda x: "⚠️ FALLO" if x == -1 else "✅ OK")
+    return df
+
+def visualizar_resultados(df):
+    plt.figure(figsize=(10, 6))
+    
+    # Puntos normales en azul, anomalías en rojo
+    colores = df['anomalia_predicha'].map({1: 'blue', -1: 'red'})
+    
+    plt.scatter(df['timestamp'], df['temperatura'], c=colores, label='Detección de IA')
+    plt.axhline(y=4, color='orange', linestyle='--', label='Límite Seguridad')
+    
+    plt.title("Control de Temperatura Agrosuper - Detección con ML")
+    plt.xlabel("Tiempo")
+    plt.ylabel("Temperatura (°C)")
+    plt.legend()
+    plt.show()
+
+if __name__ == "__main__":
+    df_crudo = descargar_datos()
+    df_analizado = detectar_anomalias(df_crudo)
+    
+    if df_analizado is not None:
+        print("\n--- RESULTADOS DEL ANÁLISIS DE IA ---")
+        print(df_analizado[['sensor_id', 'temperatura', 'es_alerta']].tail(10))
+        visualizar_resultados(df_analizado)
