@@ -1,9 +1,8 @@
-# Ignorar entorno virtual
-venv/
+# Archivos de sistema y python
 __pycache__/
+*.pyc
 
-# Ignorar configuraciones de entorno (aquí irán las claves de Azure)
-.env
-
-# Ignorar archivos de sistema
-.DS_Store
+# Archivos de claves (NUNCA SUBIR)
+serviceAccountKey.json
+.streamlit/secrets.toml
+*.env
